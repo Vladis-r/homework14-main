@@ -1,5 +1,8 @@
 import sqlite3
+from collections import Counter
+import json
 from flask import jsonify
+from pprint import pprint as pp
 
 def search_by_title(title):
     """
@@ -59,19 +62,24 @@ def search_from_one_year_to_year(from_one_year, to_year):
 
         return jsonify(output_by_years)
 
-
-def search_by_rating(rating):
+def search_by_rating(age_rating):
     """
     Функция для поиска фильмов по рейтингу возрастных ограничений
     :param rating: рейтинг возрастных ограничений
     :return: список фильмов в json
     """
+    rating_parameters = {
+        "children": ('G', ''),
+        "family": ('G', 'PG', 'PG-13'),
+        "adult": ('R', 'NC-17')
+    }
+
     with sqlite3.connect('netflix.db') as connect:
         cursor = connect.cursor()
         sqlite_query = (f"""
         SELECT title, rating, description
         FROM netflix
-        WHERE rating IN {rating}
+        WHERE rating IN {rating_parameters[age_rating]}
         """)
         cursor.execute(sqlite_query)
         result = cursor.fetchall()
@@ -84,31 +92,75 @@ def search_by_rating(rating):
             "description": r[2].rstrip('\n')
             })
 
-        return output_by_rating
+        return jsonify(output_by_rating)
 
 
-def test_func(rating):
+def search_by_genre(genre):
+    """
+    Функция для поиска фильмов по жанру
+    :param genre: жанр фильма
+    :return: список 10 самых свежих фильмов
+    """
+    with sqlite3.connect('netflix.db') as connect:
+        cursor = connect.cursor()
+        sqlite_query = (f"""
+        SELECT title, description, release_year
+        FROM netflix
+        WHERE listed_in LIKE '%{genre}%'
+        ORDER BY release_year DESC
+        LIMIT 10
+        """)
+        cursor.execute(sqlite_query)
+        result = cursor.fetchall()
+
+        output_by_genre = []
+        for r in result:
+            output_by_genre.append({
+            "title": r[0],
+            "description": r[1].rstrip('\n')
+            })
+
+        return jsonify(output_by_genre)
+
+def search_by_actors(actor1, actor2):
     with sqlite3.connect('../netflix.db') as connect:
         cursor = connect.cursor()
         sqlite_query = (f"""
-        SELECT title, rating, description
+        SELECT "cast"
         FROM netflix
-        WHERE rating IN {rating}
+        WHERE "cast" LIKE '%{actor1}%' AND "cast" LIKE '%{actor2}%'
         """)
         cursor.execute(sqlite_query)
         result = cursor.fetchall()
 
-        output_by_rating = []
+        list_of_actors = []
+
+        for res in result:
+            list_of_actors.extend(res[0].split(', '))
+
+        counter = Counter(list_of_actors)
+        result_list = []
+        for actor, count in counter.items():
+            if actor not in [actor1, actor2] and count > 2:
+                result_list.append(actor)
+
+        return result_list
+
+def search_by_request(type, year, genre):
+    with sqlite3.connect('../netflix.db') as connect:
+        cursor = connect.cursor()
+        sqlite_query = (f"""
+           SELECT title, description
+           FROM netflix
+           WHERE type = '{type}' AND release_year = {year} AND listed_in LIKE '%{genre}%'
+           """)
+        cursor.execute(sqlite_query)
+        result = cursor.fetchall()
+        output_by_request = []
         for r in result:
-            output_by_rating.append({
+            output_by_request.append({
             "title": r[0],
-            "rating": r[1],
-            "description": r[2].rstrip('\n')
+            "description": r[1].rstrip('\n')
             })
-        for i in output_by_rating:
-            print(i)
-        print(output_by_rating)
-        return jsonify(output_by_rating)
 
-a = test_func("""('G')""")
-
+        return pp(json.dumps(output_by_request))
